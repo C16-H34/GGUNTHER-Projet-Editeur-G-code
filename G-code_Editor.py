@@ -64,12 +64,11 @@ def ecriture(temp_tete, ratio_speed, ratio_extrud, code_couche):
     #on retourne la couche modifiée
     return newcouche
 
-'''CALCUL_NOMBRE_COUCHE parcours le fichier et renvoi le nombre de couche total'''
-def Calcul_Nombre_Couche(Lignes_Gcode) : 
-    Nombre_Couche = 0
-    for Couche in Lignes_Gcode : 
-        if Couche == ';LAYER_CHANGE':
-            Nombre_Couche += 1
+'''CALCUL_NOMBRE_COUCHE parcours le fichier et renvoi le nombre de couche'''
+def Calcul_Nombre_Couche(Fichier) : 
+    Gcode=str(Fichier.read())
+    Nombre_Couche = Gcode.count(';LAYER_CHANGE')
+    print(f'Le Gcode est composé de {Nombre_Couche} couches')
     return Nombre_Couche
 
 '''CALCUL_TEMPERATURE retourne une liste contenant une valeur de température par couche. 
@@ -139,42 +138,41 @@ def Calcul_Extrud ():
 '''MAIN est la fonction principale du fichier'''       
 def Main() :
     
-    #Extraction du G-code inital et séparation en couche : ATTENTION la séparation n'est pas parfaite et des commentaires sont comptés comme couches
-    with open("xyz-10mm-calibration-cube_0.4n_0.2mm_PLA_MK4_8m.gcode", 'r') as f:
-        Gcode=list(map(str,f.read().split("\n\n")))
+    #Extraction du G-code inital et séparation en couche :
+    with open("xyz-10mm-calibration-cube_0.4n_0.2mm_PLA_MK4_8m.gcode", 'r') as fichier:
+        NB_COUCHE=Calcul_Nombre_Couche(fichier)
+        Gcode=list(map(str,fichier.read().split(';LAYER_CHANGE'))) #On sépare le code selon les différentes couches (La première étant composée des commentaires et de la phase d'initialisation)
+        Dernier_Bloc=Gcode[-1].split('; stop printing object xyz-10mm-calibration-cube.stl id:0 copy 0') #On scinde le dernier bloc en deux, une partie avec et une partie sans impression
+        Gcode.pop(-1) #On supprime le dernier bloc pour éviter la redondance
+        for i in range(0,len(Dernier_Bloc)) : 
+            Gcode.append(Dernier_Bloc[i])
         
     #initialisation de newcode : la liste qui contiendra le code modifié séparé par couche
     Newcode = []
-    Compteur_Couche = 0
     
     #Calcul des paramètres
-    NB_COUCHE = Calcul_Nombre_Couche(Gcode) 
     Temperature_Tete = Calcul_Temperature(NB_COUCHE) #Temperature de la tête en degrés Celsius (pour chaque couche)
-    Ratio_Tete = Calcul_Vitesse(NB_COUCHE) #Coefficient multiplicateur de la vitesse d'impression  
+    Ratio_Vitesse_Tete = Calcul_Vitesse(NB_COUCHE) #Coefficient multiplicateur de la vitesse d'impression  
     Ratio_Extrud = Calcul_Extrud() #Pourcentage de sur-extrudation ou sous-extrudation, il est ecrit en décimal, positif pour la sur-extrudation et négatif pour la sous-extrudation
     
-    for Couche in Gcode:
-        if Couche[0] != ';':
-            Compteur_Couche += 1
-        
+    for i in range(0,len(Gcode)):
         #Séparation de la couche par ligne de code
-        Code_Couche = Couche.split("\n") 
-        
-        #ecriture du nouveau code de la couche dans la liste newcouche
-        Newcouche = ecriture(Temperature_Tete, Ratio_Tete, Ratio_Extrud, Code_Couche)
-        #creation d'un string de la nouvelle couche 
+        Code_Couche = Gcode[i].split("\n")
+        #Ecriture du nouveau code de la couche dans la liste Newcouche
+        if i == 0 or i == len(Gcode)-1 :  #Couche d'initialisation et de commentaire, nécessitant seulement recopiage 
+            Newcouche = ecriture(-1, -1, -1, Gcode[i])
+        else : #Couche d'impression nécessitant des modifications
+            Newcouche = ecriture(Temperature_Tete[i-1],Ratio_Vitesse_Tete[i-1],Ratio_Extrud[i-1], Gcode[i])
+
+        #Creation d'un string de la nouvelle couche 
         Strnewcouche = '\n'.join(Newcouche)
-        #ecriture du code modifié dans une liste newcode
+        #Ecriture du code modifié dans une liste newcode
         Newcode.append(Strnewcouche)
         Newcode.append('\n')
-        
-    #strnewcode est le string du nouveau code
-    Strnewcode = '\n'.join(Newcode)
     
-    ''' #*******Traitement du fichier*********
-    if code[i][0] == ";": #Cette ligne est un commentaire, on le recopie simplement 
-        Code_modifie += code  '''
-       
+    #Strnewcode est le string du nouveau code
+    Strnewcode = '\n'.join(Newcode)
+ 
     #Ecriture du G-code mis à jour dans un nouveau fichier
     with open("newgcode_cube.gcode", "w") as fichier:
         fichier.write(Strnewcode)
