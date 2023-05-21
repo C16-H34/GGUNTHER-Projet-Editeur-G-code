@@ -64,11 +64,13 @@ def ecriture(temp_tete, ratio_speed, ratio_extrud, code_couche):
     #on retourne la couche modifiée
     return newcouche
 
-'''CALCUL_NOMBRE_COUCHE parcours le fichier et renvoi le nombre de couche'''
-def Calcul_nombre_couche(code) : 
-    #A CODER
-    Nb_couche = 50
-    return Nb_couche
+'''CALCUL_NOMBRE_COUCHE parcours le fichier et renvoi le nombre de couche total'''
+def Calcul_Nombre_Couche(Lignes_Gcode) : 
+    Nombre_Couche = 0
+    for Couche in Lignes_Gcode : 
+        if Couche == ';LAYER_CHANGE':
+            Nombre_Couche += 1
+    return Nombre_Couche
 
 '''CALCUL_TEMPERATURE retourne une liste contenant une valeur de température par couche. 
 La variation est linéaire par phase. Les phases sont choisies par l'utiisateur'''
@@ -139,26 +141,30 @@ def Main() :
     
     #Extraction du G-code inital et séparation en couche : ATTENTION la séparation n'est pas parfaite et des commentaires sont comptés comme couches
     with open("xyz-10mm-calibration-cube_0.4n_0.2mm_PLA_MK4_8m.gcode", 'r') as f:
-        Gcode=list(map(str,f.read().split("\n")))
+        Gcode=list(map(str,f.read().split("\n\n")))
         
     #initialisation de newcode : la liste qui contiendra le code modifié séparé par couche
     Newcode = []
+    Compteur_Couche = 0
     
     #Calcul des paramètres
-    NB_COUCHE = Calcul_nombre_couche(Gcode) 
+    NB_COUCHE = Calcul_Nombre_Couche(Gcode) 
     Temperature_Tete = Calcul_Temperature(NB_COUCHE) #Temperature de la tête en degrés Celsius (pour chaque couche)
     Ratio_Tete = Calcul_Vitesse(NB_COUCHE) #Coefficient multiplicateur de la vitesse d'impression  
     Ratio_Extrud = Calcul_Extrud() #Pourcentage de sur-extrudation ou sous-extrudation, il est ecrit en décimal, positif pour la sur-extrudation et négatif pour la sous-extrudation
     
     for Couche in Gcode:
-        #séparation de la couche par ligne de code
+        if Couche[0] != ';':
+            Compteur_Couche += 1
+        
+        #Séparation de la couche par ligne de code
         Code_Couche = Couche.split("\n") 
         
         #ecriture du nouveau code de la couche dans la liste newcouche
         Newcouche = ecriture(Temperature_Tete, Ratio_Tete, Ratio_Extrud, Code_Couche)
         #creation d'un string de la nouvelle couche 
         Strnewcouche = '\n'.join(Newcouche)
-        #ecrittre du code modifié dans une liste newcode
+        #ecriture du code modifié dans une liste newcode
         Newcode.append(Strnewcouche)
         Newcode.append('\n')
         
