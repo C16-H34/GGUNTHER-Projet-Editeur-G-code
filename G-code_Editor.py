@@ -12,8 +12,9 @@ def ecriture(temp_tete, ratio_speed, ratio_extrud, code_couche):
     #initialisation de newcouche, la liste qui sera retournée par la fonction
     newcouche = []
     #on chauffe la tete a la temperature desiree au debut de chaque couche
-    newcouche.append('M104 S' + str(temp_tete))
-    newcouche.append('M109 R' + str(temp_tete))
+    if temp_tete != -1 :
+        newcouche.append('M104 S' + str(temp_tete))
+        newcouche.append('M109 R' + str(temp_tete))
 
     #parcours des lignes de la couche 
     for ligne in code_couche:
@@ -21,7 +22,7 @@ def ecriture(temp_tete, ratio_speed, ratio_extrud, code_couche):
         newligne = ''
 
         #si la ligne est vide alors on ne la modifie pas : nécessaire car tout test d'index renvoie une erreur sur une string vide
-        if ligne == '':
+        if ligne == '' or temp_tete == -1 :
             newligne = ligne
             newcouche.append(newligne)
             continue
@@ -46,9 +47,12 @@ def ecriture(temp_tete, ratio_speed, ratio_extrud, code_couche):
             #sinon, si le mot gere l'extrudation, effectuer sa modification avec ratio_extrud
             elif (mot[0] == 'E' and len(mot)>1):
                 extrud = str(float(mot[1:]) + (ratio_extrud*float(mot[1:])))
-                newmot = 'E' + extrud[1:6]
+                if extrud[0] == '-':
+                    newmot = 'E-' + extrud[2:6]
+                else : 
+                    newmot = 'E' + extrud[1:6]
             #sinon, si le mot gere la vitesse d'impression, effectuer la modification avec ratio_speed
-            elif mot[0] == 'F':
+            elif mot[0] == 'F' and len(mot)>1:
                 speed = str(int((ratio_speed*int(mot[1:]))))
                 newmot = 'F' + speed
             #sinon, on ne doit pas modifier le mot
@@ -65,9 +69,10 @@ def ecriture(temp_tete, ratio_speed, ratio_extrud, code_couche):
     return newcouche
 
 '''CALCUL_NOMBRE_COUCHE parcours le fichier et renvoi le nombre de couche'''
-def Calcul_Nombre_Couche(Fichier) : 
-    Gcode=str(Fichier.read())
-    Nombre_Couche = Gcode.count(';LAYER_CHANGE')
+def Calcul_Nombre_Couche(Fichier) :
+    global gcode 
+    gcode=Fichier.read()
+    Nombre_Couche = str(gcode).count(';LAYER_CHANGE')
     print(f'Le Gcode est composé de {Nombre_Couche} couches')
     return Nombre_Couche
 
@@ -131,7 +136,7 @@ def Calcul_Vitesse (Nombre_couche):
 
 '''CALCUL_EXTRUD retourne une liste '''
 def Calcul_Extrud ():
-    #A CODER
+    
     return 0.1
     
 
@@ -141,11 +146,12 @@ def Main() :
     #Extraction du G-code inital et séparation en couche :
     with open("xyz-10mm-calibration-cube_0.4n_0.2mm_PLA_MK4_8m.gcode", 'r') as fichier:
         NB_COUCHE=Calcul_Nombre_Couche(fichier)
-        Gcode=list(map(str,fichier.read().split(';LAYER_CHANGE'))) #On sépare le code selon les différentes couches (La première étant composée des commentaires et de la phase d'initialisation)
-        Dernier_Bloc=Gcode[-1].split('; stop printing object xyz-10mm-calibration-cube.stl id:0 copy 0') #On scinde le dernier bloc en deux, une partie avec et une partie sans impression
-        Gcode.pop(-1) #On supprime le dernier bloc pour éviter la redondance
-        for i in range(0,len(Dernier_Bloc)) : 
-            Gcode.append(Dernier_Bloc[i])
+        Gcode=list(map(str,gcode.split(';LAYER_CHANGE'))) #On sépare le code selon les différentes couches (La première étant composée des commentaires et de la phase d'initialisation)
+    Dernier_Bloc=Gcode[-1].split('; stop printing object xyz-10mm-calibration-cube.stl id:0 copy 0') #On scinde le dernier bloc en deux, une partie avec et une partie sans impression
+    Gcode.pop(-1) #On supprime le dernier bloc pour éviter la redondance
+    for i in range(0,len(Dernier_Bloc)) : 
+        Gcode.append(Dernier_Bloc[i])
+        
         
     #initialisation de newcode : la liste qui contiendra le code modifié séparé par couche
     Newcode = []
@@ -156,13 +162,15 @@ def Main() :
     Ratio_Extrud = Calcul_Extrud() #Pourcentage de sur-extrudation ou sous-extrudation, il est ecrit en décimal, positif pour la sur-extrudation et négatif pour la sous-extrudation
     
     for i in range(0,len(Gcode)):
+        print(i)
         #Séparation de la couche par ligne de code
         Code_Couche = Gcode[i].split("\n")
         #Ecriture du nouveau code de la couche dans la liste Newcouche
         if i == 0 or i == len(Gcode)-1 :  #Couche d'initialisation et de commentaire, nécessitant seulement recopiage 
-            Newcouche = ecriture(-1, -1, -1, Gcode[i])
+            Newcouche = ecriture(-1, -1, -1, Code_Couche)
         else : #Couche d'impression nécessitant des modifications
-            Newcouche = ecriture(Temperature_Tete[i-1],Ratio_Vitesse_Tete[i-1],Ratio_Extrud[i-1], Gcode[i])
+            #Newcouche = ecriture(Temperature_Tete[i-1],Ratio_Vitesse_Tete[i-1],Ratio_Extrud[i-1], Gcode[i])
+            Newcouche = ecriture(Temperature_Tete[i-1], 0.9, 0.1, Code_Couche)
 
         #Creation d'un string de la nouvelle couche 
         Strnewcouche = '\n'.join(Newcouche)
